@@ -16,7 +16,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ECM ${KF6_MIN_VERSION} REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
-set(INSTALL_SDDM_THEME TRUE)
+if(WIN32)
+    message(STATUS "Experimental Plasma Desktop Windows port")
+    set(INSTALL_SDDM_THEME FALSE)
+    set(_PLASMA_DEFAULT_ON_UNIX OFF)
+    option(WINDOWS_PORT_BUILD_KCMS "Attempt to build KCMs on Windows" OFF)
+else()
+    set(INSTALL_SDDM_THEME TRUE)
+    set(_PLASMA_DEFAULT_ON_UNIX ON)
+endif()
 
 include(KDEInstallDirs)
 include(KDECMakeSettings)
@@ -36,8 +44,8 @@ include(KDEGitCommitHooks)
 include(ECMQmlModule)
 include(ECMConfiguredInstall)
 
-option(BUILD_DOC "Whether to build the documentation" ON)
-option(BUILD_KCM_TABLET "Build the Tablet KCM" ON)
+option(BUILD_DOC "Whether to build the documentation" ${_PLASMA_DEFAULT_ON_UNIX})
+option(BUILD_KCM_TABLET "Build the Tablet KCM" ${_PLASMA_DEFAULT_ON_UNIX})
 
 find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
     Quick
@@ -88,7 +96,9 @@ find_package(Plasma ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(PlasmaQuick ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(PlasmaActivities ${PROJECT_DEP_VERSION} REQUIRED)
 find_package(PlasmaActivitiesStats ${PROJECT_DEP_VERSION} REQUIRED)
-find_package(PolkitQt6-1 REQUIRED)
+if(NOT WIN32)
+    find_package(PolkitQt6-1 REQUIRED)
+endif()
 
 if(BUILD_TESTING)
     find_package(Qt6Test ${QT_MIN_VERSION} CONFIG REQUIRED)
@@ -119,8 +129,14 @@ set_package_properties(KAccounts6 PROPERTIES
 )
 
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(SignOnOAuth2 IMPORTED_TARGET signon-oauth2plugin)
+if(WIN32)
+    find_package(PkgConfig)
+else()
+    find_package(PkgConfig REQUIRED)
+endif()
+if(PKG_CONFIG_FOUND)
+    pkg_check_modules(SignOnOAuth2 IMPORTED_TARGET signon-oauth2plugin)
+endif()
 set_package_properties(signon-oauth2plugin PROPERTIES
     DESCRIPTION "Plugin for SignOnQt6 which handles OAuth and OAuth2 logins"
     URL "https://gitlab.com/accounts-sso/signon-plugin-oauth2"
@@ -180,7 +196,9 @@ find_package(LibKLookAndFeel ${PROJECT_DEP_VERSION} CONFIG REQUIRED)
 find_package(LibKWorkspace ${PROJECT_DEP_VERSION} CONFIG REQUIRED)
 find_package(LibNotificationManager ${PROJECT_DEP_VERSION} CONFIG REQUIRED)
 find_package(LibTaskManager ${PROJECT_DEP_VERSION} CONFIG REQUIRED)
-find_package(KWinDBusInterface CONFIG REQUIRED)
+if(NOT WIN32)
+    find_package(KWinDBusInterface CONFIG REQUIRED)
+endif()
 find_package(ScreenSaverDBusInterface CONFIG REQUIRED)
 find_package(KRunnerAppDBusInterface CONFIG REQUIRED)
 find_package(KF6ItemModels CONFIG REQUIRED)
@@ -194,33 +212,33 @@ set_package_properties(KF6Baloo PROPERTIES
     TYPE RECOMMENDED
 )
 
-find_package(X11)
-set_package_properties(X11 PROPERTIES
-    DESCRIPTION "X11 libraries"
-    URL "https://www.x.org"
-    PURPOSE "Required for building the X11 based workspace"
-    TYPE REQUIRED
-)
-
-find_package(UDev)
-set_package_properties(UDev PROPERTIES
-    DESCRIPTION "API for enumerating and introspecting local devices (part of systemd)"
-    URL "https://www.freedesktop.org/wiki/Software/systemd/"
-    PURPOSE "Required for device discovery in game controller kcm"
-    TYPE OPTIONAL
-)
-
-find_package(XCB REQUIRED COMPONENTS XCB)
-
-pkg_check_modules(XKBREGISTRY xkbregistry REQUIRED IMPORTED_TARGET)
-
-ecm_find_qmlmodule(org.kde.pipewire 0.1)
+if(NOT WIN32)
+    find_package(X11)
+    set_package_properties(X11 PROPERTIES
+        DESCRIPTION "X11 libraries"
+        URL "https://www.x.org"
+        PURPOSE "Required for building the X11 based workspace"
+        TYPE REQUIRED
+    )
+    find_package(UDev)
+    set_package_properties(UDev PROPERTIES
+        DESCRIPTION "API for enumerating and introspecting local devices (part of systemd)"
+        URL "https://www.freedesktop.org/wiki/Software/systemd/"
+        PURPOSE "Required for device discovery in game controller kcm"
+        TYPE OPTIONAL
+    )
+    find_package(XCB REQUIRED COMPONENTS XCB)
+    pkg_check_modules(XKBREGISTRY xkbregistry REQUIRED IMPORTED_TARGET)
+    ecm_find_qmlmodule(org.kde.pipewire 0.1)
+endif()
 
 if(XORGLIBINPUT_FOUND)
   set(HAVE_XORGLIBINPUT 1)
 endif()
 
-include(ConfigureChecks.cmake)
+if(NOT WIN32)
+    include(ConfigureChecks.cmake)
+endif()
 
 find_package(PackageKitQt6)
 set_package_properties(PackageKitQt6 PROPERTIES
@@ -239,10 +257,12 @@ set_package_properties(GLIB2 PROPERTIES
     TYPE OPTIONAL
 )
 
-# For kimpanel
-pkg_check_modules(IBUS "ibus-1.0>=1.5.0" IMPORTED_TARGET)
-pkg_check_modules(GOBJECT gobject-2.0 IMPORTED_TARGET)
-pkg_check_modules(SCIM scim IMPORTED_TARGET)
+# Linux input-method integrations are not available on Windows.
+if(NOT WIN32)
+    pkg_check_modules(IBUS "ibus-1.0>=1.5.0" IMPORTED_TARGET)
+    pkg_check_modules(GOBJECT gobject-2.0 IMPORTED_TARGET)
+    pkg_check_modules(SCIM scim IMPORTED_TARGET)
+endif()
 
 ecm_setup_version(${PROJECT_VERSION} VARIABLE_PREFIX PLASMA VERSION_HEADER plasma_version.h)
 
@@ -280,15 +300,23 @@ add_subdirectory(runners)
 add_subdirectory(containments)
 add_subdirectory(toolboxes)
 add_subdirectory(applets)
-add_subdirectory(kcms)
-add_subdirectory(knetattach)
+if(NOT WIN32 OR WINDOWS_PORT_BUILD_KCMS)
+    add_subdirectory(kcms)
+endif()
+if(NOT WIN32)
+    add_subdirectory(knetattach)
+endif()
 if(KAccounts6_FOUND AND AccountsQt6_FOUND)
     add_subdirectory(attica-kde)
 endif()
 add_subdirectory(imports/activitymanager/)
-add_subdirectory(solid-device-automounter)
+if(NOT WIN32)
+    add_subdirectory(solid-device-automounter)
+endif()
 add_subdirectory(emojier)
-add_subdirectory(kded)
+if(NOT WIN32)
+    add_subdirectory(kded)
+endif()
 if(X11_FOUND)
     add_subdirectory(kaccess)
 endif()
@@ -329,7 +357,9 @@ set_package_properties(FontNotoColorEmoji PROPERTIES
     TYPE RUNTIME
 )
 
-add_subdirectory(appiumtests)
+if(NOT WIN32)
+    add_subdirectory(appiumtests)
+endif()
 
 if(BUILD_DOC)
     add_subdirectory(doc)
