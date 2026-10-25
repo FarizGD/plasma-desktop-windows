@@ -23,6 +23,9 @@ permissions:
 
 env:
   CRAFT_ROOT: C:\\CraftRoot
+  # Craft 26.10 was released before its Windows CI cache was published.
+  # Pin the bootstrap and cache generation to the stable 26.04 line for now.
+  CRAFT_BRANCH: "26.04"
 
 jobs:
   craft:
@@ -41,8 +44,9 @@ jobs:
         run: |
           python -m pip install --upgrade certifi
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Invoke-WebRequest https://raw.githubusercontent.com/KDE/craft/master/setup/CraftBootstrap.py -OutFile CraftBootstrap.py
-          python CraftBootstrap.py --prefix $env:CRAFT_ROOT --use-defaults
+          Invoke-WebRequest "https://raw.githubusercontent.com/KDE/craft/$env:CRAFT_BRANCH/setup/CraftBootstrap.py" -OutFile CraftBootstrap.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python CraftBootstrap.py --branch $env:CRAFT_BRANCH --prefix $env:CRAFT_ROOT --use-defaults
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Discover Craft commands and blueprints
