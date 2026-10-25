@@ -23,9 +23,9 @@ permissions:
 
 env:
   CRAFT_ROOT: C:\\CraftRoot
-  # Craft 26.10 was released before its Windows CI cache was published.
-  # Pin the bootstrap and cache generation to the stable 26.04 line for now.
-  CRAFT_BRANCH: "26.04"
+  # KDE Craft currently publishes its bootstrap from the master branch.
+  # Release-number branch names such as 26.04 are not present in the repository.
+  CRAFT_BRANCH: "master"
 
 jobs:
   craft:
