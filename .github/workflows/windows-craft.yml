@@ -1,0 +1,93 @@
+name: Windows (Craft)
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Craft packages to build, space separated"
+        default: "libplasma plasma-workspace"
+        type: string
+  push:
+    branches: [master]
+    paths:
+      - "CMakeLists.txt"
+      - "WINDOWS_PORT.md"
+      - ".github/workflows/windows-craft.yml"
+
+concurrency:
+  group: windows-craft-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CRAFT_ROOT: C:\\CraftRoot
+
+jobs:
+  craft:
+    name: Craft dependency reconnaissance
+    runs-on: windows-2022
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Developer Mode
+        shell: pwsh
+        run: reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
+
+      - name: Bootstrap Craft
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade certifi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Invoke-WebRequest https://raw.githubusercontent.com/KDE/craft/master/setup/CraftBootstrap.py -OutFile CraftBootstrap.py
+          python CraftBootstrap.py --prefix $env:CRAFT_ROOT --use-defaults
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Discover Craft commands and blueprints
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          . "$env:CRAFT_ROOT\craft\craftenv.ps1"
+          craft --help
+          craft --search libplasma
+          craft --search plasma-workspace
+
+      - name: Build selected targets
+        shell: pwsh
+        continue-on-error: true
+        env:
+          TARGETS: ${{ inputs.targets || 'libplasma plasma-workspace' }}
+        run: |
+          . "$env:CRAFT_ROOT\craft\craftenv.ps1"
+          $targets = $env:TARGETS.Split(" ", [StringSplitOptions]::RemoveEmptyEntries)
+          $results = @()
+          foreach ($target in $targets) {
+            Write-Host "::group::craft $target"
+            craft $target
+            $results += [pscustomobject]@{ Target = $target; ExitCode = $LASTEXITCODE }
+            Write-Host "::endgroup::"
+          }
+          "## Craft build results" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          foreach ($result in $results) {
+            $status = if ($result.ExitCode -eq 0) { "ok" } else { "FAILED (exit $($result.ExitCode))" }
+            "- $($result.Target): $status" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          }
+          if ($results | Where-Object { $_.ExitCode -ne 0 }) { exit 1 }
+
+      - name: Collect Craft logs
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force craft-logs | Out-Null
+          Copy-Item "$env:USERPROFILE\.craft\*" craft-logs -Recurse -ErrorAction SilentlyContinue
+          Copy-Item "$env:CRAFT_ROOT\etc\CraftSettings.ini" craft-logs -ErrorAction SilentlyContinue
+          exit 0
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: craft-logs
+          path: craft-logs
+          if-no-files-found: ignore
