@@ -46,7 +46,26 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Invoke-WebRequest "https://raw.githubusercontent.com/KDE/craft/$env:CRAFT_BRANCH/setup/CraftBootstrap.py" -OutFile CraftBootstrap.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python CraftBootstrap.py --branch $env:CRAFT_BRANCH --prefix $env:CRAFT_ROOT --use-defaults
+
+          # Upstream currently defaults gettext to 1.0, whose MSVC build links
+          # libtextstyle and fails with unresolved iconv_ostream_create. Version
+          # 0.22.3 already carries Craft's MSVC-compatible no-libtextstyle patch.
+          Invoke-WebRequest "https://invent.kde.org/packaging/craft/-/archive/$env:CRAFT_BRANCH/craft-$env:CRAFT_BRANCH.zip" -OutFile craft-source.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Expand-Archive -Path craft-source.zip -DestinationPath craft-source -Force
+          $craftSource = Get-ChildItem "craft-source" -Directory | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $craftSource) { throw "Craft source archive did not contain a source directory." }
+
+          $gettextBlueprint = Join-Path $craftSource "blueprints/libs/gettext/gettext.py"
+          if (-not (Test-Path $gettextBlueprint)) { throw "Could not find the gettext Craft blueprint: $gettextBlueprint" }
+          $blueprintText = Get-Content $gettextBlueprint -Raw
+          if (-not $blueprintText.Contains('self.defaultTarget = "1.0"')) {
+            throw "Unexpected gettext blueprint; refusing to apply an unverified version override."
+          }
+          $blueprintText = $blueprintText.Replace('self.defaultTarget = "1.0"', 'self.defaultTarget = "0.22.3"')
+          Set-Content -Path $gettextBlueprint -Value $blueprintText -NoNewline -Encoding utf8
+
+          python CraftBootstrap.py --branch $env:CRAFT_BRANCH --localDev $craftSource --prefix $env:CRAFT_ROOT --use-defaults
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Discover Craft commands and blueprints
