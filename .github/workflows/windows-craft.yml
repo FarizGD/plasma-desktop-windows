@@ -50,11 +50,10 @@ jobs:
           # Upstream currently defaults gettext to 1.0, whose MSVC build links
           # libtextstyle and fails with unresolved iconv_ostream_create. Version
           # 0.22.3 already carries Craft's MSVC-compatible no-libtextstyle patch.
-          Invoke-WebRequest "https://invent.kde.org/packaging/craft/-/archive/$env:CRAFT_BRANCH/craft-$env:CRAFT_BRANCH.zip" -OutFile craft-source.zip
+          # Use GitHub's public mirror because invent.kde.org can return 403 on hosted runners.
+          git clone --depth 1 --branch $env:CRAFT_BRANCH https://github.com/KDE/craft.git craft-source
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Expand-Archive -Path craft-source.zip -DestinationPath craft-source -Force
-          $craftSource = Get-ChildItem "craft-source" -Directory | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $craftSource) { throw "Craft source archive did not contain a source directory." }
+          $craftSource = (Resolve-Path "craft-source").Path
 
           $gettextBlueprint = Join-Path $craftSource "blueprints/libs/gettext/gettext.py"
           if (-not (Test-Path $gettextBlueprint)) { throw "Could not find the gettext Craft blueprint: $gettextBlueprint" }
